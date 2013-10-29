@@ -5,6 +5,7 @@ import java.io.IOException;
 public class VBImageConverter {
 	java.awt.image.BufferedImage img = null;
 	java.util.ArrayList<VBChar>chars;
+	java.util.ArrayList<Integer>bgMap;
 
 	public static void main(String[] args) {
 		if(args.length != 1){
@@ -16,6 +17,8 @@ public class VBImageConverter {
 		c.scaleImage();
 		c.parseImage();
 		c.writeImage(args[0]);
+		c.printChars(args[0]);
+		c.printBGMap(args[0]);
 	}
 	
 	private static void Usage(){
@@ -27,22 +30,58 @@ public class VBImageConverter {
 		System.out.println("Usage: java VBImageConverter <filename>");
 	}
 	
+	public void printChars(String sPath){
+		try{
+			java.io.FileOutputStream fos = new java.io.FileOutputStream(sPath + "_chars");
+			for(int i=0; i<this.chars.size();i++){
+				if(i>0) fos.write(",".getBytes());
+				fos.write(this.chars.get(i).getDataCode().getBytes());
+				fos.write((" //Char " + i).getBytes());
+				fos.write("\n".getBytes());
+			}
+			fos.flush();
+			fos.close();
+		}catch(Exception ex){
+			ex.printStackTrace();
+		}
+	}
+	
+	public void printBGMap(String sPath){
+		try{
+			java.io.FileOutputStream fos = new java.io.FileOutputStream(sPath + "_bgmap");
+			for(int i=0; i<this.bgMap.size(); i++){
+				if(i>0) fos.write(",".getBytes());
+				fos.write(String.format("0x%04x", this.bgMap.get(i)).getBytes());
+				if(i>0 && (i+1)%4 == 0) fos.write("\n".getBytes());
+			}
+			fos.flush();
+			fos.close();
+		}catch(Exception ex){
+			ex.printStackTrace();
+		}
+	}
+	
 	public void writeImage(String sPath){
 		try{
 			java.io.File f = new java.io.File(sPath + "_converted");
 			javax.imageio.ImageIO.write(img, "png", f);
 			this.chars = new java.util.ArrayList<VBChar>();
+			this.bgMap = new java.util.ArrayList<Integer>();
 			for(int y=0; y<img.getHeight();y+=8){
 				for(int x=0; x<img.getWidth(); x+=8){
 					VBChar v = new VBChar(img.getSubimage(x, y, 8, 8));
 					boolean bMatch = false;
-					for(int i=0; i<this.chars.size(); i++){
-						if(this.chars.get(i).Compare(v)){
+					for(int i=0; i<this.chars.size(); i++){						
+						if(this.chars.get(i).Compare(v)) {
 							bMatch = true;
-							break;
+							this.bgMap.add(i & 0x3ff);
+							break;						
 						}
 					}
-					if(!bMatch) this.chars.add(v);					
+					if(!bMatch) {
+						this.chars.add(v);
+						this.bgMap.add((this.chars.size()-1) & 0x3ff);
+					}
 				}
 			}
 			System.out.printf("There are %d unique chars\n", this.chars.size());
@@ -123,6 +162,7 @@ public class VBImageConverter {
 					r.getData().getPixel(x, y, c);
 					iData[idx]=setVBPixel(iData[idx],c[0]);
 					if(iCounter%16==0)idx++;
+					iCounter++;
 				}
 			}
 		}
@@ -142,16 +182,34 @@ public class VBImageConverter {
 			return this.iData;
 		}
 		
-		public boolean Compare(VBChar c){
+		public String getDataCode(){
+			String sReturn = "";
+			int iByte = 0;
+			for(int i=0; i<this.iData.length; i++){
+				//Chars are represented as two bytes with LSB first
+				if(i>0) sReturn += ",";
+				iByte = (this.iData[i] >> 16) & 0xFF;
+				sReturn += String.format("0x%02x", iByte);
+				iByte = (this.iData[i] >> 24) & 0xFF;
+				sReturn += String.format("%02x", iByte);
+				iByte = (this.iData[i] & 0xFF);
+				sReturn += String.format("%02x", iByte);
+				iByte = (this.iData[i] >> 8) & 0xFF;
+				sReturn += String.format("%02x", iByte);
+			}
+			return sReturn;
+		}
+		
+		public Boolean Compare(VBChar c){
 			
-			boolean comp = true;
+			Boolean b = true;
 			for(int i=0; i<4; i++){
 				if(this.iData[i] != c.getData()[i]){
-					comp = false;
+					b = false;
 					break;
 				}
 			}
-			return comp;
+			return b;
 		}
 	}
 }
