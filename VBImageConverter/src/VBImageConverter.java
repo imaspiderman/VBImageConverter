@@ -1,3 +1,4 @@
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
@@ -65,8 +66,15 @@ public class VBImageConverter {
 		try{
 			java.io.File f = new java.io.File(sPath + "_converted");
 			javax.imageio.ImageIO.write(img, "png", f);
+			BufferedImage blank = new BufferedImage(8,8,BufferedImage.TYPE_INT_RGB);
+			blank.getGraphics().setColor(Color.black);
+			blank.getGraphics().fillRect(0, 0, 8, 8);
+			VBChar vbBlank = new VBChar(blank);
+			
 			this.chars = new java.util.ArrayList<VBChar>();
 			this.bgMap = new java.util.ArrayList<Integer>();
+			this.chars.add(vbBlank);
+			
 			for(int y=0; y<img.getHeight();y+=8){
 				for(int x=0; x<img.getWidth(); x+=8){
 					VBChar v = new VBChar(img.getSubimage(x, y, 8, 8));
@@ -74,7 +82,7 @@ public class VBImageConverter {
 					for(int i=0; i<this.chars.size(); i++){						
 						if(this.chars.get(i).Compare(v)) {
 							bMatch = true;
-							this.bgMap.add(i & 0x3ff);
+							this.bgMap.add((i & 0x3ff));
 							break;						
 						}
 					}
@@ -82,6 +90,9 @@ public class VBImageConverter {
 						this.chars.add(v);
 						this.bgMap.add((this.chars.size()-1) & 0x3ff);
 					}
+				}
+				for(int x=0;x < ((64*8)-img.getWidth()); x+=8){
+					this.bgMap.add(0);
 				}
 			}
 			System.out.printf("There are %d unique chars\n", this.chars.size());
@@ -126,7 +137,7 @@ public class VBImageConverter {
 		//Change to red image
 		for(int x=0; x<img.getWidth(); x++){
 			for(int y=0; y<img.getHeight(); y++){
-				img.getRaster().getPixel(x, y, iColor);				
+				img.getRaster().getPixel(x, y, iColor);
 				int r = (int)(((double)(iColor[0] + iColor[1] + iColor[2]) / (double)765) * 255);
 
 				int[] rc = new int[4];
@@ -134,6 +145,7 @@ public class VBImageConverter {
 				rc[1] = 75;
 				rc[2] = 125;
 				rc[3] = 175;
+				if (r > rc[3]) r = rc[3];
 				for(int i=0; i < 3; i++){
 					if(r>rc[i] && r<=rc[i+1]){
 						if(java.lang.Math.abs(r-rc[i+1]) > java.lang.Math.abs(r-rc[i])){
@@ -153,15 +165,15 @@ public class VBImageConverter {
 		int[] c;
 		public VBChar(java.awt.image.BufferedImage r){
 			c = new int[3];
-			iData = new int[4];
+			iData = new int[16];
 			
 			int iCounter = 1;
 			int idx = 0;
 			for(int y=0; y<8; y++){
-				for(int x=0; x<8; x++){
+				for(int x=7; x>=0; x--){
 					r.getData().getPixel(x, y, c);
 					iData[idx]=setVBPixel(iData[idx],c[0]);
-					if(iCounter%16==0)idx++;
+					if(iCounter%4==0)idx++;
 					iCounter++;
 				}
 			}
@@ -174,6 +186,7 @@ public class VBImageConverter {
 				case 75: r = (r<<2)|1; break;
 				case 125: r = (r<<2)|2; break;
 				case 175: r = (r<<2)|3; break;
+				default: r = (r<<2)|0; break;
 			}		
 			return r;
 		}
@@ -185,17 +198,13 @@ public class VBImageConverter {
 		public String getDataCode(){
 			String sReturn = "";
 			int iByte = 0;
-			for(int i=0; i<this.iData.length; i++){
+			for(int i=0; i<this.iData.length; i+=2){
 				//Chars are represented as two bytes with LSB first
 				if(i>0) sReturn += ",";
-				iByte = (this.iData[i] >> 16) & 0xFF;
+				iByte = (this.iData[i+1] & 0xFF);
 				sReturn += String.format("0x%02x", iByte);
-				iByte = (this.iData[i] >> 24) & 0xFF;
-				sReturn += String.format("%02x", iByte);
 				iByte = (this.iData[i] & 0xFF);
-				sReturn += String.format("%02x", iByte);
-				iByte = (this.iData[i] >> 8) & 0xFF;
-				sReturn += String.format("%02x", iByte);
+				sReturn += String.format(",0x%02x", iByte);
 			}
 			return sReturn;
 		}
@@ -203,7 +212,7 @@ public class VBImageConverter {
 		public Boolean Compare(VBChar c){
 			
 			Boolean b = true;
-			for(int i=0; i<4; i++){
+			for(int i=0; i<this.iData.length; i++){
 				if(this.iData[i] != c.getData()[i]){
 					b = false;
 					break;
